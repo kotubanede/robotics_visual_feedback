@@ -133,58 +133,45 @@ for t in logTime[1:]:
         logVel[i][stepCount] = jVel[i]
 
     # ЯКОБИАН-1
-    (linJac,angJac) = p.calculateJacobian(
-        bodyUniqueId = boxId, 
-        linkIndex = eefLinkIdx,
-        localPosition = [0,0,0],
-        objPositions = jPos,
-        objVelocities = [0,0,0,0],
-        objAccelerations = [0,0,0,0]
-    )
-    J = np.block([
-        [np.array(linJac)[:3,:3], np.zeros((3,1))],
-        [np.array(angJac)[2,:]]
-    ])
+    # (linJac,angJac) = p.calculateJacobian(
+    #     bodyUniqueId = boxId, 
+    #     linkIndex = eefLinkIdx,
+    #     localPosition = [0,0,0],
+    #     objPositions = jPos,
+    #     objVelocities = [0,0,0,0],
+    #     objAccelerations = [0,0,0,0]
+    # )
+    # J = np.block([
+    #     [np.array(linJac)[:3,:3], np.zeros((3,1))],
+    #     [np.array(angJac)[2,:]]
+    # ])
 
-    J = np.block([[np.array(linJac)[:,:]],
-                [np.array(angJac)[:,:]]])
+    # J = np.block([[np.array(linJac)[:,:]],
+    #             [np.array(angJac)[:,:]]])
     
     # print("J :", J)
     #
 
-    # L1 = L2 = L = 0.5
-    # th1 = p.getJointState(boxId, 1)[0]
-    # th2 = p.getJointState(boxId, 3)[0]
-
-    # Якобиан по учебнику
-    # J = np.array([  
-    #                 [ -L*math.cos(th1), -L*math.cos(th1)-L*math.cos(th1+th2), 0, 0],
-    #                 [ L*math.sin(th1), L*math.sin(th1)+L*math.sin(th1+th2), 0, 0],
-    #                 [ 0, 0, 1, 0],
-    #                 [ 0, 0, 0, 0],
-    #                 [ 0, 0, 0, 0],
-    #                 [ 1, 1, 0, 1]
-    #             ])
-    ###
+    L1 = L2 = L = 0.5
+    th1 = p.getJointState(boxId, 1)[0]
+    th2 = p.getJointState(boxId, 3)[0]
 
     # Якобиан по моему расчету
-    # J = np.array([[-L1*math.cos(th1)-L2*math.cos(th1+th2), -L2*math.cos(th1+th2), 0, 0],
-    #              [L1*math.sin(th1)+L2*math.sin(th1+th2),L2*math.sin(th1+th2),0, 0],
-    #              [0, 0, -1, 0],
-    #              [0, 0, 0, 0],
-    #              [0, 0, 0, 0],
-    #              [1, 1, 0, 1]
-    #              ])
-    # print("J :", J)
+    J = np.array([[-L1*math.sin(th1)-L2*math.sin(th1+th2), -L2*math.sin(th1+th2), 0, 0],
+                 [L1*math.cos(th1)+L2*math.cos(th1+th2),L2*math.cos(th1+th2),0, 0],
+                 [0, 0, -1, 0],
+                 [0, 0, 0, 0],
+                 [0, 0, 0, 0],
+                 [1, 1, 0, 1]
+                 ])
+    print("J :", J)
     # ###
+
     J_inv = np.linalg.inv(J.T @ J)@J.T
     dq = (J_inv @ w).flatten()[[1,0,2,3]] # меняем x, y местами
     dq[3] = -dq[3] # угол в другую сторону
-    dq[2] = -dq[2] # ось Oz в другую сторону
+    # dq[2] = -dq[2] # ось Oz в другую сторону. ТОЛЬКО ДЛЯ ЯКОБИАН-1
     p.setJointMotorControlArray(bodyIndex=boxId, jointIndices=jointIndices, targetVelocities=dq, controlMode=p.VELOCITY_CONTROL)
-
-# print("logPos :" , logPos)
-# print("logVel :", logVel)
 
 import matplotlib.pyplot as plt
 
