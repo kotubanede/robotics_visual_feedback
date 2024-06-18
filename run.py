@@ -61,13 +61,25 @@ dt = 1/240
 maxTime = 10
 logTime = np.arange(0.0, maxTime, dt)
 
+sz = logTime.size
+logPos = np.zeros((4, sz))
+logVel = np.zeros((4, sz))
+
+Pos0 = [0.2, 1.4708, 0.15, 0.1]
+Vel0 = [0, 0, 0, 0]
+
+for i in range(4):
+    logPos[i][0] = Pos0[i]
+
 jointIndices = [1, 3, 5, 7]
 eefLinkIdx = 8
 
 Z0 = 0.5 # высота базы
 
+Pos_target = [0.0, 1.5708, -0.15, 0.0]
+
 # go to the desired position
-p.setJointMotorControlArray(bodyIndex=boxId, jointIndices=jointIndices, targetPositions=[0.0, 1.5708, -0.15, 0.0], controlMode=p.POSITION_CONTROL)
+p.setJointMotorControlArray(bodyIndex=boxId, jointIndices=jointIndices, targetPositions=Pos_target, controlMode=p.POSITION_CONTROL)
 for _ in range(100):
     p.stepSimulation()
 
@@ -82,22 +94,20 @@ sd = np.reshape(np.array(corners[0][0]),(8,1)).astype(int) # вектор s - к
 ###
 
 # go to the starting position
-p.setJointMotorControlArray(bodyIndex=boxId, jointIndices=jointIndices, targetPositions=[0.2, 1.4708, 0.15, 0.1], controlMode=p.POSITION_CONTROL)
+p.setJointMotorControlArray(bodyIndex=boxId, jointIndices=jointIndices, targetPositions=Pos0, controlMode=p.POSITION_CONTROL)
 for _ in range(100):
     p.stepSimulation()
 ###
 
-idx = 1
-camCount = 0
+stepCount = 0
 w = np.zeros((6,1))
 
 # запускаем симуляцию
 for t in logTime[1:]:
     p.stepSimulation()
-    camCount += 1
+    stepCount += 1
 
-    if (camCount == 5):
-        camCount = 0 # сбрасываем счетчик
+    if (stepCount % 5 == 0):
         updateCamPos(camera)
         img = camera.get_frame()
         corners, markerIds, rejectedCandidates = detector.detectMarkers(img)
@@ -113,12 +123,16 @@ for t in logTime[1:]:
         coef = 1/2
         w = -coef * L0T @ e 
 
-    # ЯКОБИАН-1
     # находим координаты и скорости наших joint'ов
     jStates = p.getJointStates(boxId, jointIndices=jointIndices)
     jPos = [state[0] for state in jStates]
     jVel = [state[1] for state in jStates]
 
+    for i in range(4):
+        logPos[i][stepCount] = jPos[i]
+        logVel[i][stepCount] = jVel[i]
+
+    # ЯКОБИАН-1
     (linJac,angJac) = p.calculateJacobian(
         bodyUniqueId = boxId, 
         linkIndex = eefLinkIdx,
@@ -127,8 +141,6 @@ for t in logTime[1:]:
         objVelocities = [0,0,0,0],
         objAccelerations = [0,0,0,0]
     )
-
-    
     J = np.block([
         [np.array(linJac)[:3,:3], np.zeros((3,1))],
         [np.array(angJac)[2,:]]
@@ -137,12 +149,12 @@ for t in logTime[1:]:
     J = np.block([[np.array(linJac)[:,:]],
                 [np.array(angJac)[:,:]]])
     
-    print("J :", J)
+    # print("J :", J)
     #
 
-    L1 = L2 = L = 0.5
-    th1 = p.getJointState(boxId, 1)[0]
-    th2 = p.getJointState(boxId, 3)[0]
+    # L1 = L2 = L = 0.5
+    # th1 = p.getJointState(boxId, 1)[0]
+    # th2 = p.getJointState(boxId, 3)[0]
 
     # Якобиан по учебнику
     # J = np.array([  
@@ -170,5 +182,27 @@ for t in logTime[1:]:
     dq[3] = -dq[3] # угол в другую сторону
     dq[2] = -dq[2] # ось Oz в другую сторону
     p.setJointMotorControlArray(bodyIndex=boxId, jointIndices=jointIndices, targetVelocities=dq, controlMode=p.VELOCITY_CONTROL)
-    
+
+# print("logPos :" , logPos)
+# print("logVel :", logVel)
+
+import matplotlib.pyplot as plt
+
+plt.title("Positions")
+for idx in range(4):
+    plt.subplot(2,2,idx+1)
+    plt.grid(True)
+    plt.plot(logTime, logPos[idx])
+    plt.plot([0, logTime[-1]], [Pos_target[idx], Pos_target[idx]], '--r')
+    plt.legend()
+plt.show()
+
+plt.title("Velocities")
+for idx in range(4):
+    plt.subplot(2,2,idx+1)
+    plt.grid(True)
+    plt.plot(logTime, logVel[idx])
+    plt.legend()
+plt.show()
+
 p.disconnect()
